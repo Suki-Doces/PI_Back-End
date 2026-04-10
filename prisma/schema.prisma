@@ -1,0 +1,156 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model administradores {
+  id_admin     Int          @id @default(autoincrement())
+  nome         String       @db.VarChar(100)
+  email        String       @unique(map: "email") @db.VarChar(150)
+  senha        String       @db.VarChar(255)
+  data_criacao DateTime     @default(now()) @db.Timestamp(0)
+  logs_admin   logs_admin[]
+}
+
+model categorias {
+  id_categoria Int        @id @default(autoincrement())
+  nome         String     @db.VarChar(100)
+  descricao    String?    @db.Text
+  produtos     produtos[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model clientes {
+  id_cliente      Int         @id @default(autoincrement())
+  nome            String      @db.VarChar(100)
+  email           String      @unique(map: "email") @db.VarChar(150)
+  senha           String?     @db.VarChar(255)
+  telefone        String?     @db.VarChar(20)
+  data_nascimento DateTime?   @db.Date
+  status_id       Boolean     @default(true)
+  data_cadastro   DateTime    @default(now()) @db.Timestamp(0)
+  enderecos       enderecos[]
+}
+
+model cupons {
+  id_cupom Int         @id @default(autoincrement())
+  codigo   String      @unique(map: "codigo") @db.VarChar(50)
+  tipo     cupons_tipo
+  valor    Decimal     @db.Decimal(10, 2)
+  validade DateTime?   @db.Date
+  ativo    Boolean?    @default(true)
+  pedidos  pedidos[]
+}
+
+model enderecos {
+  id_endereco Int      @id @default(autoincrement())
+  id_cliente  Int
+  cep         String   @db.VarChar(10)
+  logradouro  String   @db.VarChar(255)
+  numero      String   @db.VarChar(10)
+  complemento String?  @db.VarChar(100)
+  bairro      String?  @db.VarChar(100)
+  cidade      String?  @db.VarChar(100)
+  estado      String?  @db.Char(2)
+  clientes    clientes @relation(fields: [id_cliente], references: [id_cliente], onDelete: Cascade, onUpdate: NoAction, map: "enderecos_ibfk_1")
+
+  @@index([id_cliente], map: "id_cliente")
+}
+
+model estoque {
+  id_estoque        Int      @id @default(autoincrement())
+  id_produto        Int
+  quantidade_atual  Int?     @default(0)
+  quantidade_minima Int?     @default(10)
+  data_atualizacao  DateTime @default(now()) @db.Timestamp(0)
+  produtos          produtos @relation(fields: [id_produto], references: [id_produto], onDelete: Cascade, onUpdate: NoAction, map: "estoque_ibfk_1")
+
+  @@index([id_produto], map: "id_produto")
+}
+
+model itens_pedido {
+  id_item        Int      @id @default(autoincrement())
+  id_pedido      Int
+  id_produto     Int
+  quantidade     Int
+  preco_unitario Decimal  @db.Decimal(10, 2)
+  pedidos        pedidos  @relation(fields: [id_pedido], references: [id_pedido], onDelete: Cascade, onUpdate: NoAction, map: "itens_pedido_ibfk_1")
+  produtos       produtos @relation(fields: [id_produto], references: [id_produto], onDelete: NoAction, onUpdate: NoAction, map: "itens_pedido_ibfk_2")
+
+  @@index([id_pedido], map: "id_pedido")
+  @@index([id_produto], map: "id_produto")
+}
+
+model logs_admin {
+  id_log          Int             @id @default(autoincrement())
+  id_admin        Int
+  acao            String          @db.VarChar(255)
+  data_log        DateTime        @default(now()) @db.Timestamp(0)
+  administradores administradores @relation(fields: [id_admin], references: [id_admin], onDelete: Cascade, onUpdate: NoAction, map: "logs_admin_ibfk_1")
+
+  @@index([id_admin], map: "id_admin")
+}
+
+model pedidos {
+  id_pedido        Int                      @id @default(autoincrement())
+  id_usuario       Int
+  id_cupom         Int?
+  valor_total      Decimal                  @db.Decimal(10, 2)
+  metodo_pagamento pedidos_metodo_pagamento
+  status           pedidos_status?          @default(pendente)
+  data_pedido      DateTime                 @default(now()) @db.Timestamp(0)
+  itens_pedido     itens_pedido[]
+  usuario          usuario                  @relation(fields: [id_usuario], references: [id_usuario], onDelete: NoAction, onUpdate: NoAction, map: "pedidos_ibfk_1")
+  cupons           cupons?                  @relation(fields: [id_cupom], references: [id_cupom], onDelete: NoAction, onUpdate: NoAction, map: "pedidos_ibfk_2")
+
+  @@index([id_cupom], map: "id_cupom")
+  @@index([id_usuario], map: "id_usuario")
+}
+
+model produtos {
+  id_produto   Int            @id @default(autoincrement())
+  id_categoria Int?
+  nome         String         @db.VarChar(100)
+  descricao    String?        @db.Text
+  preco        Decimal        @db.Decimal(10, 2)
+  quantidade   Int?           @default(0)
+  imagem       String?        @db.VarChar(255)
+  data_criacao DateTime       @default(now()) @db.Timestamp(0)
+  estoque      estoque[]
+  itens_pedido itens_pedido[]
+  categorias   categorias?    @relation(fields: [id_categoria], references: [id_categoria], onUpdate: NoAction, map: "produtos_ibfk_1")
+
+  @@index([id_categoria], map: "id_categoria")
+}
+
+model usuario {
+  id_usuario   Int       @id @default(autoincrement())
+  nome         String    @db.VarChar(100)
+  email        String    @unique(map: "email") @db.VarChar(150)
+  senha        String    @db.VarChar(255)
+  data_criacao DateTime  @default(now()) @db.Timestamp(0)
+  pedidos      pedidos[]
+}
+
+enum cupons_tipo {
+  percentual
+  valor_fixo
+}
+
+enum pedidos_metodo_pagamento {
+  pix
+  cartao
+  boleto
+}
+
+enum pedidos_status {
+  pendente
+  pago
+  enviado
+  entregue
+  cancelado
+}
