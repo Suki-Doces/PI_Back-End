@@ -18,6 +18,9 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(logger); // ← adicione essa linha
 
+// Middleware para liberar o acesso público à pasta de imagens
+app.use('/imagens', express.static('uploads'));
+
 
 // Conectando as rotas da Suki Doces
 app.use('/suki-doces/usuario', rotaUsuario);

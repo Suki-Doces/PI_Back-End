@@ -43,6 +43,48 @@ export async function register(req, res) {
   })
 }
 
+// Login exclusivo para Administradores
+export async function loginAdmin(req, res, next) {
+  try {
+    const { email, senha } = req.body;
+
+    // 1. Busca na tabela de ADMINISTRADORES (e não de usuários)
+    const admin = await prisma.administradores.findUnique({
+      where: { email }
+    });
+
+    if (!admin) {
+      return res.status(401).json({ mensagem: 'Credenciais de admin inválidas' });
+    }
+
+    // 2. Verifica a senha 
+    // (Nota: No seu banco está '123456' em texto limpo. Em produção, use bcrypt aqui também!)
+    if (senha !== admin.senha) { 
+      return res.status(401).json({ mensagem: 'Credenciais de admin inválidas' });
+    }
+
+    // 3. Gera o Token com a "role" chumbada como admin
+    const token = jwt.sign(
+      { 
+        id: admin.id_admin, 
+        email: admin.email,
+        role: 'admin' // ← A mágica acontece aqui!
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '1d' }
+    );
+
+    return res.status(200).json({
+      mensagem: 'Login de Administrador bem-sucedido',
+      token,
+      admin: { id: admin.id_admin, nome: admin.nome, email: admin.email }
+    });
+
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function login(req, res) {
   const { email, senha } = req.body
 
@@ -66,7 +108,11 @@ export async function login(req, res) {
   }
 
   const token = jwt.sign(
-    { id: user.id_usuario, email: user.email },
+    { 
+      id: user.id_usuario, 
+      email: user.email,
+      role: user.role // ← ADICIONE ESSA LINHA AQUI
+    },
     process.env.JWT_SECRET,
     { expiresIn: '7d' }
   )

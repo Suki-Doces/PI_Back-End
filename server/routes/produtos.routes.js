@@ -1,9 +1,14 @@
 import express from 'express';
 import prisma from '../lib/prisma.js';
+// 1. Importando nossos "cadeados" de segurança
+import { authMiddleware, adminOnly } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-// ✅ PRIMEIRO as rotas específicas
+// ==========================================
+// ROTAS PÚBLICAS (Clientes podem acessar)
+// ==========================================
+
 router.get('/categorias', async (req, res, next) => {
   try {
     const categorias = await prisma.categorias.findMany({
@@ -18,18 +23,56 @@ router.get('/categorias', async (req, res, next) => {
 
 router.get('/', async (req, res, next) => {
   try {
-    const produtos = await prisma.produtos.findMany();
+    const produtos = await prisma.produtos.findMany({
+      include: {
+        categorias: true
+      }
+    });
     return res.status(200).json(produtos);
   } catch (error) {
     next(error);
   }
 });
 
-// EDITAR PRODUTO
-router.put('/:id', async (req, res, next) => {
+// ==========================================
+// ROTAS PROTEGIDAS (Apenas Admin)
+// ==========================================
+
+// CRIAR NOVO PRODUTO (POST)
+router.post('/', authMiddleware, adminOnly, async (req, res, next) => {
+  try {
+    const { nome, descricao, preco, quantidade, id_categoria, imagem } = req.body;
+
+    // Validação básica
+    if (!nome || !preco) {
+      return res.status(400).json({ mensagem: 'Nome e Preço são obrigatórios' });
+    }
+
+    const novoProduto = await prisma.produtos.create({
+      data: {
+        nome,
+        descricao,
+        preco,
+        quantidade: quantidade || 0, // Se não mandar quantidade, entra como 0
+        id_categoria,
+        imagem
+      }
+    });
+
+    return res.status(201).json({
+      mensagem: 'Produto adicionado ao catálogo com sucesso!',
+      produto: novoProduto
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// EDITAR PRODUTO (PUT)
+router.put('/:id', authMiddleware, adminOnly, async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
-    const { nome, descricao, preco, quantidade, id_categoria } = req.body;
+    const { nome, descricao, preco, quantidade, id_categoria, imagem } = req.body;
 
     const produto = await prisma.produtos.findUnique({
       where: { id_produto: id }
@@ -45,8 +88,9 @@ router.put('/:id', async (req, res, next) => {
         ...(nome && { nome }),
         ...(descricao && { descricao }),
         ...(preco && { preco }),
-        ...(quantidade && { quantidade }),
-        ...(id_categoria && { id_categoria })
+        ...(quantidade !== undefined && { quantidade }), 
+        ...(id_categoria && { id_categoria }),
+        ...(imagem && { imagem })
       }
     });
 
@@ -54,6 +98,31 @@ router.put('/:id', async (req, res, next) => {
       mensagem: 'Produto atualizado com sucesso',
       produto: atualizado
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETAR PRODUTO (DELETE)
+router.delete('/:id', authMiddleware, adminOnly, async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+
+    // 1. Verifica se o doce existe antes de tentar apagar
+    const produto = await prisma.produtos.findUnique({
+      where: { id_produto: id }
+    });
+
+    if (!produto) {
+      return res.status(404).json({ mensagem: 'Produto não encontrado' });
+    }
+
+    // 2. Deleta do banco
+    await prisma.produtos.delete({
+      where: { id_produto: id }
+    });
+
+    return res.status(200).json({ mensagem: 'Produto removido do catálogo com sucesso' });
   } catch (error) {
     next(error);
   }

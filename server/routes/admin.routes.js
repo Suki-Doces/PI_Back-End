@@ -1,13 +1,16 @@
 import express from 'express';
-import { authMiddleware } from '../middleware/authMiddleware.js';
+import { loginAdmin } from '../controller/auth.controller.js'; // Importa a função nova
+import { authMiddleware, adminOnly } from '../middleware/authMiddleware.js';
 
-// 1. Criamos o nosso "mini-gerenciador" de rotas
 const router = express.Router();
 
-router.get('/', authMiddleware, async (req, res) => {
-    res.json({
-        mensagem: 'Bem-vindo ao Dashboard Admin'
-    })
+// Porta de entrada pública para o dono da loja
+router.post('/login', loginAdmin);
+
+// === Daqui pra baixo ficam as rotas protegidas do admin ===
+// Exemplo da sua rota de dashboard:
+router.get('/', authMiddleware, adminOnly, async (req, res) => {
+  res.json({ mensagem: 'Bem-vindo ao Dashboard Admin' });
 });
 
-export default router; // ← estava faltando isso
+export default router;
