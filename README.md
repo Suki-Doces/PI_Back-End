@@ -1,11 +1,11 @@
 🍬 Suki Doces — API REST
 
-API backend para e-commerce de doces, desenvolvida com Node.js e Express.js, conectada a banco de dados MySQL na AWS RDS.
+API backend para e-commerce de doces, desenvolvida com Node.js e Express.js, conectada a banco de dados MySQL na [Aiven.io](https://aiven.io/).
 
 🚀 Tecnologias
 Node.js + Express
 Prisma ORM
-MySQL (AWS RDS)
+MySQL (Aiven)
 JWT (autenticação)
 Bcrypt (criptografia de senhas)
 
@@ -25,5 +25,5 @@ Bcrypt (criptografia de senhas)
 ### Prerequisites
 - Node.js 18+ installed
 - npm or yarn
-- MySQL database (AWS RDS or local)
+- MySQL database (cloud database or local)
 - Git
