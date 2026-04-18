@@ -1,5 +1,6 @@
 import express from 'express';
 import prisma from '../lib/prisma.js';
+import { upload } from '../middleware/uploadMiddleware.js';
 // 1. Importando nossos "cadeados" de segurança
 import { authMiddleware, adminOnly } from '../middleware/authMiddleware.js';
 
@@ -82,12 +83,17 @@ router.get('/', async (req, res, next) => {
 // ROTAS PROTEGIDAS (Apenas Admin)
 // ==========================================
 
-// CRIAR NOVO PRODUTO (POST)
-router.post('/', authMiddleware, adminOnly, async (req, res, next) => {
-  try {
-    const { nome, descricao, preco, quantidade, id_categoria, imagem } = req.body;
 
-    // Validação básica
+// CRIAR NOVO PRODUTO (POST) - Agora com upload de imagem!
+router.post('/', authMiddleware, adminOnly, upload.single('imagem'), async (req, res, next) => {
+  try {
+    // Note que agora pegamos os dados de req.body e o arquivo de req.file
+    const { nome, descricao, preco, quantidade, id_categoria } = req.body;
+
+    // Se o Multer processou um arquivo, o nome gerado estará em req.file.filename
+    // Se não enviaram foto, fica null
+    const nomeDaImagem = req.file ? req.file.filename : null;
+
     if (!nome || !preco) {
       return res.status(400).json({ mensagem: 'Nome e Preço são obrigatórios' });
     }
@@ -96,15 +102,16 @@ router.post('/', authMiddleware, adminOnly, async (req, res, next) => {
       data: {
         nome,
         descricao,
-        preco,
-        quantidade: quantidade || 0, // Se não mandar quantidade, entra como 0
-        id_categoria,
-        imagem
+        // Como os dados vêm de um formulário (texto), precisamos converter números:
+        preco: parseFloat(preco),
+        quantidade: quantidade ? parseInt(quantidade, 10) : 0, 
+        id_categoria: id_categoria ? parseInt(id_categoria, 10) : null,
+        imagem: nomeDaImagem // Salvando o NOME do arquivo no banco!
       }
     });
 
     return res.status(201).json({
-      mensagem: 'Produto adicionado ao catálogo com sucesso!',
+      mensagem: 'Doce adicionado ao catálogo com sucesso!',
       produto: novoProduto
     });
   } catch (error) {
