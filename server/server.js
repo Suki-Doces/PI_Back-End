@@ -20,6 +20,10 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(logger); // ← adicione essa linha
 
+app.get('/', (req, res) => {
+  res.send('Bem-vindo à API da Suki Doces! Sistema operando 100% na nuvem.');
+});
+
 // Middleware para liberar o acesso público à pasta de imagens
 app.use('/imagens', express.static('uploads'));
 
@@ -37,11 +41,11 @@ async function startServer() {
     try {
         // 1. O jeito Prisma de testar a conexão com o banco
         await prisma.$connect();
-        console.log(" Conexão com o banco de dados bem-sucedida!");
+        console.log("Conexão com o banco de dados bem-sucedida!");
 
         // 2. Se o banco conectou, aí sim iniciamos o servidor Express
         app.listen(PORT, () => {
-            console.log(` Servidor da loja rodando na porta ${PORT}`);
+            console.log(`Servidor da loja rodando na porta ${PORT}`);
         });
 
     } catch (error) {
