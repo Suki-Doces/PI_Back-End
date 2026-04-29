@@ -37,7 +37,7 @@ router.get('/categorias', async (req, res, next) => {
 // });
 
 // -------------- < ROTA NOVA COM FILTROS > --------------
-router.get('/', async (req, res, next) => {
+router.get('/', upload.single('imagem'), async (req, res, next) => {
   try {
     // 1. Captura os filtros que o Angular enviou na URL
     const { categoria, query, filtro } = req.query;
@@ -85,7 +85,7 @@ router.get('/', async (req, res, next) => {
 
 
 // CRIAR NOVO PRODUTO (POST) - Agora com upload de imagem!
-router.post('/', authMiddleware, adminOnly, upload.single('imagem'), async (req, res, next) => {
+router.post('/', upload.single('imagem'), async (req, res, next) => {
   try {
     // Note que agora pegamos os dados de req.body e o arquivo de req.file
     const { nome, descricao, preco, quantidade, id_categoria } = req.body;
@@ -120,7 +120,7 @@ router.post('/', authMiddleware, adminOnly, upload.single('imagem'), async (req,
 });
 
 // EDITAR PRODUTO (PUT)
-router.put('/:id', authMiddleware, adminOnly, async (req, res, next) => {
+router.put('/:id', upload.single('imagem'), async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     const { nome, descricao, preco, quantidade, id_categoria, imagem } = req.body;
