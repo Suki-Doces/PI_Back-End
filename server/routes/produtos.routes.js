@@ -79,6 +79,35 @@ router.get('/', upload.single('imagem'), async (req, res, next) => {
   }
 });
 
+router.get('/:id', async (req, res, next) => {
+  try {
+    // Converte o ID da URL para número
+    const id = parseInt(req.params.id);
+
+    // Validação de segurança para garantir que o ID é um número válido
+    if (isNaN(id)) {
+      return res.status(400).json({ mensagem: 'ID de produto inválido' });
+    }
+
+    // Busca o produto no banco de dados usando o Prisma
+    const produto = await prisma.produtos.findUnique({
+      where: { id_produto: id }
+    });
+
+    // Se o produto não existir, retorna erro 404
+    if (!produto) {
+      return res.status(404).json({ mensagem: 'Produto não encontrado' });
+    }
+
+    // Retorna os dados do produto para o frontend
+    return res.status(200).json(produto);
+    
+  } catch (error) {
+    // Repassa o erro para o middleware de tratamento de erros
+    next(error);
+  }
+});
+
 // ==========================================
 // ROTAS PROTEGIDAS (Apenas Admin)
 // ==========================================
