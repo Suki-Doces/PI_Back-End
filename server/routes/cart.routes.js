@@ -38,14 +38,14 @@ router.get('/', authMiddleware, async (req, res, next) => {
 // ADD TO CART
 router.post('/add', authMiddleware, async (req, res, next) => {
   try {
-    const idUsuario = req.usuario.id_usuario;
-    // 1. Agora recebemos id_produto do frontend
+    const idUsuario = req.usuario.id || req.usuario.id_usuario;
     const { id_produto, quantidade } = req.body;
 
     if (!id_produto || !quantidade || quantidade < 1) {
       throw new AppError('Produto ou quantidade inválida', 400);
     }
 
+    // 1. Busca o produto (Aqui ele já traz a coluna 'quantidade' do produto!)
     const product = await prisma.produtos.findUnique({
       where: { id_produto: Number(id_produto) }
     });
@@ -54,25 +54,20 @@ router.post('/add', authMiddleware, async (req, res, next) => {
       throw new AppError('Produto não encontrado', 404);
     }
 
-    const estoqueProduto = await prisma.estoque.findFirst({
-      where: { id_produto: Number(id_produto) }
-    });
-
-    const qtdEstoque = estoqueProduto ? estoqueProduto.quantidade_atual : 0;
-
-    if (qtdEstoque < quantidade) {
+    // 2. VERIFICAÇÃO DIRETA NA TABELA PRODUTO
+    if (product.quantidade < Number(quantidade)) {
       throw new AppError('Estoque insuficiente', 400);
     }
 
     const existingItem = await prisma.carrinho_itens.findFirst({
-      // 2. A busca no carrinho agora usa id_produto
       where: { usuario_id: idUsuario, id_produto: Number(id_produto) }
     });
 
     if (existingItem) {
       const newQuantity = existingItem.quantidade + Number(quantidade);
 
-      if (qtdEstoque < newQuantity) {
+      // 3. Verifica o total também usando product.quantidade
+      if (product.quantidade < newQuantity) {
         throw new AppError('Estoque insuficiente para a quantidade total', 400);
       }
 
@@ -84,7 +79,7 @@ router.post('/add', authMiddleware, async (req, res, next) => {
       await prisma.carrinho_itens.create({
         data: {
           usuario_id: idUsuario,
-          id_produto: Number(id_produto), // 3. A criação no carrinho usa id_produto
+          id_produto: Number(id_produto),
           quantidade: Number(quantidade)
         }
       });
@@ -99,13 +94,10 @@ router.post('/add', authMiddleware, async (req, res, next) => {
 // UPDATE CART ITEM
 router.put('/:itemId', authMiddleware, async (req, res, next) => {
   try {
-    const idUsuario = req.usuario.id_usuario;
+    // Certifique-se de que aqui também usa a correção:
+    const idUsuario = req.usuario.id || req.usuario.id_usuario; 
     const { itemId } = req.params;
     const { quantidade } = req.body;
-
-    if (!quantidade || quantidade < 1) {
-      throw new AppError('Quantidade inválida', 400);
-    }
 
     const cartItem = await prisma.carrinho_itens.findUnique({
       where: { id: Number(itemId) }
@@ -115,13 +107,8 @@ router.put('/:itemId', authMiddleware, async (req, res, next) => {
       throw new AppError('Não autorizado ou item não encontrado', 403);
     }
 
-    const estoqueProduto = await prisma.estoque.findFirst({
-      where: { id_produto: cartItem.id_produto }
-    });
-
-    const qtdEstoque = estoqueProduto ? estoqueProduto.quantidade_atual : 0;
-
-    if (qtdEstoque < quantidade) {
+    // 2. VERIFICAÇÃO DIRETA NA TABELA PRODUTO (cartItem.produto.quantidade)
+    if (cartItem.produto.quantidade < Number(quantidade)) {
       throw new AppError('Estoque insuficiente', 400);
     }
 
@@ -139,7 +126,7 @@ router.put('/:itemId', authMiddleware, async (req, res, next) => {
 // REMOVE FROM CART
 router.delete('/:itemId', authMiddleware, async (req, res, next) => {
   try {
-    const idUsuario = req.usuario.id_usuario;
+    const idUsuario = req.usuario.id || req.usuario.id_usuario; 
     const { itemId } = req.params;
 
     const cartItem = await prisma.carrinho_itens.findUnique({
