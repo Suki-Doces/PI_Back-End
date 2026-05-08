@@ -1,20 +1,22 @@
 import express from 'express';
-import prisma from '../lib/prisma.js';
+import { prisma } from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-// GET CART ITEMS
+// GET /carrinho — busca itens do carrinho do usuário logado
 router.get('/', authMiddleware, async (req, res, next) => {
   try {
-    const idUsuario = req.usuario.id_usuario;
+    const idUsuario = req.usuario.id;
 
     const cartItems = await prisma.carrinho_itens.findMany({
       where: { usuario_id: idUsuario },
       orderBy: { data_adicionado: 'desc' },
       include: {
-        produto: true
+        produto: {
+          select: { id_produto: true, nome: true, preco: true, imagem: true, quantidade: true }
+        }
       }
     });
 
@@ -23,11 +25,17 @@ router.get('/', authMiddleware, async (req, res, next) => {
       total: Number(item.produto.preco) * item.quantidade
     }));
 
-    const total = itemsComTotal.reduce((sum, item) => sum + item.total, 0);
+    const subtotal = itemsComTotal.reduce((sum, item) => sum + item.total, 0);
+    // REGRA DE NEGÓCIO: frete grátis acima de R$50
+    const frete = subtotal >= 50 ? 0 : 8.90;
+    const total = subtotal + frete;
 
     res.json({
       cartItems: itemsComTotal,
+      subtotal,
+      frete,
       total,
+      freteGratis: subtotal >= 50,
       itemCount: cartItems.length
     });
   } catch (error) {
@@ -35,44 +43,36 @@ router.get('/', authMiddleware, async (req, res, next) => {
   }
 });
 
-// ADD TO CART
+// POST /carrinho/add — adiciona produto ao carrinho
 router.post('/add', authMiddleware, async (req, res, next) => {
   try {
-    const idUsuario = req.usuario.id_usuario;
-    // 1. Agora recebemos id_produto do frontend
-    const { id_produto, quantidade } = req.body;
+    const idUsuario = req.usuario.id;
+    const { produto_id, quantidade } = req.body;
 
-    if (!id_produto || !quantidade || quantidade < 1) {
+    if (!produto_id || !quantidade || quantidade < 1) {
       throw new AppError('Produto ou quantidade inválida', 400);
     }
 
     const product = await prisma.produtos.findUnique({
-      where: { id_produto: Number(id_produto) }
+      where: { id_produto: Number(produto_id) }
     });
 
-    if (!product) {
-      throw new AppError('Produto não encontrado', 404);
-    }
+    if (!product) throw new AppError('Produto não encontrado', 404);
 
-    const estoqueProduto = await prisma.estoque.findFirst({
-      where: { id_produto: Number(id_produto) }
-    });
-
-    const qtdEstoque = estoqueProduto ? estoqueProduto.quantidade_atual : 0;
-
-    if (qtdEstoque < quantidade) {
+    // REGRA DE NEGÓCIO: produto sem estoque não pode ser adicionado
+    if ((product.quantidade ?? 0) < quantidade) {
       throw new AppError('Estoque insuficiente', 400);
     }
 
+    // CORRIGIDO: schema usa 'id_produto', não 'produto_id'
     const existingItem = await prisma.carrinho_itens.findFirst({
-      // 2. A busca no carrinho agora usa id_produto
-      where: { usuario_id: idUsuario, id_produto: Number(id_produto) }
+      where: { usuario_id: idUsuario, id_produto: Number(produto_id) }
     });
 
     if (existingItem) {
       const newQuantity = existingItem.quantidade + Number(quantidade);
 
-      if (qtdEstoque < newQuantity) {
+      if ((product.quantidade ?? 0) < newQuantity) {
         throw new AppError('Estoque insuficiente para a quantidade total', 400);
       }
 
@@ -81,10 +81,11 @@ router.post('/add', authMiddleware, async (req, res, next) => {
         data: { quantidade: newQuantity }
       });
     } else {
+      // CORRIGIDO: schema usa 'id_produto', não 'produto_id'
       await prisma.carrinho_itens.create({
         data: {
           usuario_id: idUsuario,
-          id_produto: Number(id_produto), // 3. A criação no carrinho usa id_produto
+          id_produto: Number(produto_id),
           quantidade: Number(quantidade)
         }
       });
@@ -96,10 +97,10 @@ router.post('/add', authMiddleware, async (req, res, next) => {
   }
 });
 
-// UPDATE CART ITEM
+// PUT /carrinho/:itemId — atualiza quantidade de um item
 router.put('/:itemId', authMiddleware, async (req, res, next) => {
   try {
-    const idUsuario = req.usuario.id_usuario;
+    const idUsuario = req.usuario.id;
     const { itemId } = req.params;
     const { quantidade } = req.body;
 
@@ -115,13 +116,12 @@ router.put('/:itemId', authMiddleware, async (req, res, next) => {
       throw new AppError('Não autorizado ou item não encontrado', 403);
     }
 
-    const estoqueProduto = await prisma.estoque.findFirst({
+    // CORRIGIDO: schema usa 'id_produto', não 'produto_id'
+    const produto = await prisma.produtos.findUnique({
       where: { id_produto: cartItem.id_produto }
     });
 
-    const qtdEstoque = estoqueProduto ? estoqueProduto.quantidade_atual : 0;
-
-    if (qtdEstoque < quantidade) {
+    if ((produto?.quantidade ?? 0) < quantidade) {
       throw new AppError('Estoque insuficiente', 400);
     }
 
@@ -130,16 +130,16 @@ router.put('/:itemId', authMiddleware, async (req, res, next) => {
       data: { quantidade: Number(quantidade) }
     });
 
-    res.json({ message: 'Quantidade do carrinho atualizada' });
+    res.json({ message: 'Quantidade atualizada' });
   } catch (error) {
     next(error);
   }
 });
 
-// REMOVE FROM CART
+// DELETE /carrinho/:itemId — remove item do carrinho
 router.delete('/:itemId', authMiddleware, async (req, res, next) => {
   try {
-    const idUsuario = req.usuario.id_usuario;
+    const idUsuario = req.usuario.id;
     const { itemId } = req.params;
 
     const cartItem = await prisma.carrinho_itens.findUnique({
@@ -150,25 +150,18 @@ router.delete('/:itemId', authMiddleware, async (req, res, next) => {
       throw new AppError('Não autorizado ou item não encontrado', 403);
     }
 
-    await prisma.carrinho_itens.delete({
-      where: { id: Number(itemId) }
-    });
-
+    await prisma.carrinho_itens.delete({ where: { id: Number(itemId) } });
     res.json({ message: 'Item removido do carrinho' });
   } catch (error) {
     next(error);
   }
 });
 
-// CLEAR CART
+// DELETE /carrinho — limpa todo o carrinho
 router.delete('/', authMiddleware, async (req, res, next) => {
   try {
-    const idUsuario = req.usuario.id_usuario;
-
-    await prisma.carrinho_itens.deleteMany({
-      where: { usuario_id: idUsuario }
-    });
-
+    const idUsuario = req.usuario.id;
+    await prisma.carrinho_itens.deleteMany({ where: { usuario_id: idUsuario } });
     res.json({ message: 'Carrinho esvaziado com sucesso' });
   } catch (error) {
     next(error);

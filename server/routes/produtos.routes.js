@@ -6,11 +6,9 @@ import { authMiddleware, adminOnly } from '../middleware/authMiddleware.js';
 const router = express.Router();
 
 // ==========================================
-// ROTAS PÚBLICAS (Clientes podem acessar)
+// ROTAS PÚBLICAS — ordem importa! fixas antes de /:id
 // ==========================================
 
-// IMPORTANTE: /categorias deve vir ANTES de /:id
-// senão o Express interpreta "categorias" como um ID
 router.get('/categorias', async (req, res, next) => {
   try {
     const categorias = await prisma.categorias.findMany({
@@ -23,35 +21,61 @@ router.get('/categorias', async (req, res, next) => {
   }
 });
 
-// CORRIGIDO: removido upload.single('imagem') do GET — middleware de upload
-// num GET não faz sentido e pode causar erros
+// ADICIONADO: produtos mais vendidos — chamado pelo ShortCatalogComponent
+// product.service.getBestSellers() → GET /produtos/mais-vendidos
+router.get('/mais-vendidos', async (req, res, next) => {
+  try {
+    const maisVendidos = await prisma.itens_pedido.groupBy({
+      by: ['id_produto'],
+      _sum: { quantidade: true },
+      orderBy: { _sum: { quantidade: 'desc' } },
+      take: 8
+    });
+
+    if (maisVendidos.length === 0) {
+      const produtos = await prisma.produtos.findMany({
+        take: 8, orderBy: { id_produto: 'desc' }, include: { categorias: true }
+      });
+      return res.json(produtos);
+    }
+
+    const ids = maisVendidos.map(item => item.id_produto);
+    const produtos = await prisma.produtos.findMany({
+      where: { id_produto: { in: ids } },
+      include: { categorias: true }
+    });
+
+    const ordenados = ids.map(id => produtos.find(p => p.id_produto === id)).filter(Boolean);
+    return res.json(ordenados);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ADICIONADO: produtos novos — chamado pelo ShortCatalogComponent
+// product.service.getNewArrivals() → GET /produtos/novos
+router.get('/novos', async (req, res, next) => {
+  try {
+    const produtos = await prisma.produtos.findMany({
+      take: 8,
+      orderBy: { data_criacao: 'desc' },
+      include: { categorias: true }
+    });
+    return res.json(produtos);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /produtos — lista com filtros
 router.get('/', async (req, res, next) => {
   try {
     const { categoria, query, filtro } = req.query;
-
     let prismaWhere = {};
-
-    if (categoria) {
-      prismaWhere.id_categoria = parseInt(categoria, 10);
-    }
-
-    if (query) {
-      prismaWhere.nome = {
-        contains: query
-      };
-    }
-
-    let queryOptions = {
-      where: prismaWhere,
-      include: {
-        categorias: true
-      }
-    };
-
-    if (filtro === 'novos') {
-      queryOptions.orderBy = { id_produto: 'desc' };
-    }
-
+    if (categoria) prismaWhere.id_categoria = parseInt(categoria, 10);
+    if (query) prismaWhere.nome = { contains: query };
+    let queryOptions = { where: prismaWhere, include: { categorias: true } };
+    if (filtro === 'novos') queryOptions.orderBy = { data_criacao: 'desc' };
     const produtos = await prisma.produtos.findMany(queryOptions);
     return res.status(200).json(produtos);
   } catch (error) {
@@ -59,23 +83,15 @@ router.get('/', async (req, res, next) => {
   }
 });
 
+// GET /produtos/:id — detalhe (SEMPRE depois das rotas fixas)
 router.get('/:id', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
-
-    if (isNaN(id)) {
-      return res.status(400).json({ mensagem: 'ID de produto inválido' });
-    }
-
+    if (isNaN(id)) return res.status(400).json({ mensagem: 'ID inválido' });
     const produto = await prisma.produtos.findUnique({
-      where: { id_produto: id },
-      include: { categorias: true }
+      where: { id_produto: id }, include: { categorias: true }
     });
-
-    if (!produto) {
-      return res.status(404).json({ mensagem: 'Produto não encontrado' });
-    }
-
+    if (!produto) return res.status(404).json({ mensagem: 'Produto não encontrado' });
     return res.status(200).json(produto);
   } catch (error) {
     next(error);
@@ -86,56 +102,33 @@ router.get('/:id', async (req, res, next) => {
 // ROTAS PROTEGIDAS (Apenas Admin)
 // ==========================================
 
-// CORRIGIDO: adicionado authMiddleware + adminOnly no POST
-// antes qualquer um podia criar produtos
 router.post('/', authMiddleware, adminOnly, upload.single('imagem'), async (req, res, next) => {
   try {
     const { nome, descricao, preco, quantidade, id_categoria } = req.body;
     const nomeDaImagem = req.file ? req.file.filename : null;
-
-    if (!nome || !preco) {
-      return res.status(400).json({ mensagem: 'Nome e Preço são obrigatórios' });
-    }
-
+    if (!nome || !preco) return res.status(400).json({ mensagem: 'Nome e Preço são obrigatórios' });
     const novoProduto = await prisma.produtos.create({
       data: {
-        nome,
-        descricao,
+        nome, descricao,
         preco: parseFloat(preco),
         quantidade: quantidade ? parseInt(quantidade, 10) : 0,
         id_categoria: id_categoria ? parseInt(id_categoria, 10) : null,
         imagem: nomeDaImagem
       }
     });
-
-    return res.status(201).json({
-      mensagem: 'Produto adicionado ao catálogo com sucesso!',
-      produto: novoProduto
-    });
+    return res.status(201).json({ mensagem: 'Produto adicionado!', produto: novoProduto });
   } catch (error) {
     next(error);
   }
 });
 
-// CORRIGIDO: adicionado authMiddleware + adminOnly no PUT
-// antes qualquer um podia editar produtos
 router.put('/:id', authMiddleware, adminOnly, upload.single('imagem'), async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     const { nome, descricao, preco, quantidade, id_categoria } = req.body;
-
-    const produto = await prisma.produtos.findUnique({
-      where: { id_produto: id }
-    });
-
-    if (!produto) {
-      return res.status(404).json({ mensagem: 'Produto não encontrado' });
-    }
-
-    // Se enviou nova imagem, usa o nome gerado pelo Multer
-    // senão mantém a imagem atual
+    const produto = await prisma.produtos.findUnique({ where: { id_produto: id } });
+    if (!produto) return res.status(404).json({ mensagem: 'Produto não encontrado' });
     const novaImagem = req.file ? req.file.filename : undefined;
-
     const atualizado = await prisma.produtos.update({
       where: { id_produto: id },
       data: {
@@ -147,11 +140,7 @@ router.put('/:id', authMiddleware, adminOnly, upload.single('imagem'), async (re
         ...(novaImagem && { imagem: novaImagem })
       }
     });
-
-    return res.status(200).json({
-      mensagem: 'Produto atualizado com sucesso',
-      produto: atualizado
-    });
+    return res.status(200).json({ mensagem: 'Produto atualizado', produto: atualizado });
   } catch (error) {
     next(error);
   }
@@ -160,20 +149,10 @@ router.put('/:id', authMiddleware, adminOnly, upload.single('imagem'), async (re
 router.delete('/:id', authMiddleware, adminOnly, async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
-
-    const produto = await prisma.produtos.findUnique({
-      where: { id_produto: id }
-    });
-
-    if (!produto) {
-      return res.status(404).json({ mensagem: 'Produto não encontrado' });
-    }
-
-    await prisma.produtos.delete({
-      where: { id_produto: id }
-    });
-
-    return res.status(200).json({ mensagem: 'Produto removido do catálogo com sucesso' });
+    const produto = await prisma.produtos.findUnique({ where: { id_produto: id } });
+    if (!produto) return res.status(404).json({ mensagem: 'Produto não encontrado' });
+    await prisma.produtos.delete({ where: { id_produto: id } });
+    return res.status(200).json({ mensagem: 'Produto removido com sucesso' });
   } catch (error) {
     next(error);
   }
