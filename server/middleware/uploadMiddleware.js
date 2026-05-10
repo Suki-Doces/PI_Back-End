@@ -1,18 +1,26 @@
 import multer from 'multer';
-import path from 'path';
+import { v2 as cloudinary } from 'cloudinary';
+import { CloudinaryStorage } from 'multer-storage-cloudinary';
+import dotenv from 'dotenv';
 
-// Configuração de onde e como salvar os arquivos
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    // Aponta para a pasta 'uploads' que já criamos na raiz do projeto
-    cb(null, 'uploads/'); 
-  },
-  filename: function (req, file, cb) {
-    // Gera um nome único: Data atual + número aleatório + extensão original (.jpg, .png, etc.)
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
+dotenv.config();
+
+// 1. Configurar o Cloudinary com as tuas chaves
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+// 2. Configurar o destino (Storage)
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'suki-doces-produtos', // Cria uma pasta com este nome lá no Cloudinary
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'avif'],
+    // transformation: [{ width: 800, height: 800, crop: 'limit' }] // Opcional: redimensiona imagens gigantes automaticamente
   }
 });
 
-// Exporta o middleware pronto para uso nas rotas
+// 3. Exportar o upload
 export const upload = multer({ storage: storage });

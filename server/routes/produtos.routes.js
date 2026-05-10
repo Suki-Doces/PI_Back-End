@@ -21,8 +21,7 @@ router.get('/categorias', async (req, res, next) => {
   }
 });
 
-// ADICIONADO: produtos mais vendidos — chamado pelo ShortCatalogComponent
-// product.service.getBestSellers() → GET /produtos/mais-vendidos
+// ADICIONADO: produtos mais vendidos
 router.get('/mais-vendidos', async (req, res, next) => {
   try {
     const maisVendidos = await prisma.itens_pedido.groupBy({
@@ -52,8 +51,7 @@ router.get('/mais-vendidos', async (req, res, next) => {
   }
 });
 
-// ADICIONADO: produtos novos — chamado pelo ShortCatalogComponent
-// product.service.getNewArrivals() → GET /produtos/novos
+// ADICIONADO: produtos novos
 router.get('/novos', async (req, res, next) => {
   try {
     const produtos = await prisma.produtos.findMany({
@@ -83,7 +81,7 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// GET /produtos/:id — detalhe (SEMPRE depois das rotas fixas)
+// GET /produtos/:id — detalhe
 router.get('/:id', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
@@ -102,33 +100,45 @@ router.get('/:id', async (req, res, next) => {
 // ROTAS PROTEGIDAS (Apenas Admin)
 // ==========================================
 
+// CRIAR PRODUTO (POST)
 router.post('/', authMiddleware, adminOnly, upload.single('imagem'), async (req, res, next) => {
   try {
     const { nome, descricao, preco, quantidade, id_categoria } = req.body;
-    const nomeDaImagem = req.file ? req.file.filename : null;
+    
+    // CORREÇÃO CLOUDINARY: Agora pegamos o 'path', que é a URL completa da imagem
+    const urlDaImagem = req.file ? req.file.path : null;
+
     if (!nome || !preco) return res.status(400).json({ mensagem: 'Nome e Preço são obrigatórios' });
+
     const novoProduto = await prisma.produtos.create({
       data: {
-        nome, descricao,
+        nome, 
+        descricao,
         preco: parseFloat(preco),
         quantidade: quantidade ? parseInt(quantidade, 10) : 0,
         id_categoria: id_categoria ? parseInt(id_categoria, 10) : null,
-        imagem: nomeDaImagem
+        imagem: urlDaImagem // Salva a URL do Cloudinary no banco
       }
     });
+
     return res.status(201).json({ mensagem: 'Produto adicionado!', produto: novoProduto });
   } catch (error) {
     next(error);
   }
 });
 
+// ATUALIZAR PRODUTO (PUT)
 router.put('/:id', authMiddleware, adminOnly, upload.single('imagem'), async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     const { nome, descricao, preco, quantidade, id_categoria } = req.body;
+    
     const produto = await prisma.produtos.findUnique({ where: { id_produto: id } });
     if (!produto) return res.status(404).json({ mensagem: 'Produto não encontrado' });
-    const novaImagem = req.file ? req.file.filename : undefined;
+
+    // CORREÇÃO CLOUDINARY: Se houver arquivo novo, pegamos a URL (path)
+    const novaImagemUrl = req.file ? req.file.path : undefined;
+
     const atualizado = await prisma.produtos.update({
       where: { id_produto: id },
       data: {
@@ -137,9 +147,10 @@ router.put('/:id', authMiddleware, adminOnly, upload.single('imagem'), async (re
         ...(preco && { preco: parseFloat(preco) }),
         ...(quantidade !== undefined && { quantidade: parseInt(quantidade, 10) }),
         ...(id_categoria && { id_categoria: parseInt(id_categoria, 10) }),
-        ...(novaImagem && { imagem: novaImagem })
+        ...(novaImagemUrl && { imagem: novaImagemUrl }) // Atualiza com a nova URL
       }
     });
+
     return res.status(200).json({ mensagem: 'Produto atualizado', produto: atualizado });
   } catch (error) {
     next(error);
