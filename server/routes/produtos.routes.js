@@ -21,7 +21,7 @@ router.get('/categorias', async (req, res, next) => {
   }
 });
 
-// ADICIONADO: produtos mais vendidos
+// Produtos mais vendidos
 router.get('/mais-vendidos', async (req, res, next) => {
   try {
     const maisVendidos = await prisma.itens_pedido.groupBy({
@@ -51,7 +51,7 @@ router.get('/mais-vendidos', async (req, res, next) => {
   }
 });
 
-// ADICIONADO: produtos novos
+// Produtos novos
 router.get('/novos', async (req, res, next) => {
   try {
     const produtos = await prisma.produtos.findMany({
@@ -65,15 +65,28 @@ router.get('/novos', async (req, res, next) => {
   }
 });
 
-// GET /produtos — lista com filtros
+// GET /produtos — lista com filtros completos (Incluindo Preço)
 router.get('/', async (req, res, next) => {
   try {
-    const { categoria, query, filtro } = req.query;
+    const { categoria, query, filtro, minPreco, maxPreco } = req.query;
     let prismaWhere = {};
+    
     if (categoria) prismaWhere.id_categoria = parseInt(categoria, 10);
     if (query) prismaWhere.nome = { contains: query };
+    
+    // FILTRO DE FAIXA DE PREÇO (Cumpre o README)
+    if (minPreco || maxPreco) {
+      prismaWhere.preco = {};
+      if (minPreco) prismaWhere.preco.gte = parseFloat(minPreco);
+      if (maxPreco) prismaWhere.preco.lte = parseFloat(maxPreco);
+    }
+
     let queryOptions = { where: prismaWhere, include: { categorias: true } };
+    
     if (filtro === 'novos') queryOptions.orderBy = { data_criacao: 'desc' };
+    if (filtro === 'menor-preco') queryOptions.orderBy = { preco: 'asc' };
+    if (filtro === 'maior-preco') queryOptions.orderBy = { preco: 'desc' };
+
     const produtos = await prisma.produtos.findMany(queryOptions);
     return res.status(200).json(produtos);
   } catch (error) {
@@ -100,12 +113,12 @@ router.get('/:id', async (req, res, next) => {
 // ROTAS PROTEGIDAS (Apenas Admin)
 // ==========================================
 
-// CRIAR PRODUTO (POST)
+// CRIAR PRODUTO (POST) - Cloudinary Ativo
 router.post('/', authMiddleware, adminOnly, upload.single('imagem'), async (req, res, next) => {
   try {
     const { nome, descricao, preco, quantidade, id_categoria } = req.body;
     
-    // CORREÇÃO CLOUDINARY: Agora pegamos o 'path', que é a URL completa da imagem
+    // Cloudinary path
     const urlDaImagem = req.file ? req.file.path : null;
 
     if (!nome || !preco) return res.status(400).json({ mensagem: 'Nome e Preço são obrigatórios' });
@@ -117,7 +130,7 @@ router.post('/', authMiddleware, adminOnly, upload.single('imagem'), async (req,
         preco: parseFloat(preco),
         quantidade: quantidade ? parseInt(quantidade, 10) : 0,
         id_categoria: id_categoria ? parseInt(id_categoria, 10) : null,
-        imagem: urlDaImagem // Salva a URL do Cloudinary no banco
+        imagem: urlDaImagem 
       }
     });
 
@@ -127,7 +140,7 @@ router.post('/', authMiddleware, adminOnly, upload.single('imagem'), async (req,
   }
 });
 
-// ATUALIZAR PRODUTO (PUT)
+// ATUALIZAR PRODUTO (PUT) - Cloudinary Ativo
 router.put('/:id', authMiddleware, adminOnly, upload.single('imagem'), async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
@@ -136,7 +149,7 @@ router.put('/:id', authMiddleware, adminOnly, upload.single('imagem'), async (re
     const produto = await prisma.produtos.findUnique({ where: { id_produto: id } });
     if (!produto) return res.status(404).json({ mensagem: 'Produto não encontrado' });
 
-    // CORREÇÃO CLOUDINARY: Se houver arquivo novo, pegamos a URL (path)
+    // Cloudinary path
     const novaImagemUrl = req.file ? req.file.path : undefined;
 
     const atualizado = await prisma.produtos.update({
@@ -147,7 +160,7 @@ router.put('/:id', authMiddleware, adminOnly, upload.single('imagem'), async (re
         ...(preco && { preco: parseFloat(preco) }),
         ...(quantidade !== undefined && { quantidade: parseInt(quantidade, 10) }),
         ...(id_categoria && { id_categoria: parseInt(id_categoria, 10) }),
-        ...(novaImagemUrl && { imagem: novaImagemUrl }) // Atualiza com a nova URL
+        ...(novaImagemUrl && { imagem: novaImagemUrl }) 
       }
     });
 
