@@ -1,14 +1,12 @@
 import express from 'express';
-// CORRIGIDO: era 'import { PrismaClient } from '@prisma/client'' seguido de
-// 'const prisma = new PrismaClient()' — isso cria uma nova conexão a cada request,
-// causando vazamento de conexões no banco. Sempre use o prisma compartilhado!
 import { prisma } from '../lib/prisma.js';
 import bcrypt from 'bcrypt';
+import { authMiddleware, adminOnly } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
 // 1. LISTAR CLIENTES (GET)
-router.get('/', async (req, res) => {
+router.get('/', authMiddleware, adminOnly, async (req, res) => {
   try {
     const clientes = await prisma.usuario.findMany({
       where: { role: 'cliente' },
@@ -37,7 +35,7 @@ router.get('/', async (req, res) => {
 });
 
 // 2. CRIAR CLIENTE (POST)
-router.post('/', async (req, res) => {
+router.post('/', authMiddleware, adminOnly, async (req, res) => {
   try {
     const { nome, email, senha, status } = req.body;
     const senhaHash = await bcrypt.hash(senha, 10);
@@ -59,7 +57,7 @@ router.post('/', async (req, res) => {
 });
 
 // 3. ATUALIZAR CLIENTE (PUT)
-router.put('/:id', async (req, res) => {
+router.put('/:id', authMiddleware, adminOnly, async (req, res) => {
   try {
     const { id } = req.params;
     const { nome, status, senha } = req.body;
@@ -85,7 +83,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // 4. DELETAR CLIENTE (DELETE)
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authMiddleware, adminOnly, async (req, res) => {
   try {
     const { id } = req.params;
 

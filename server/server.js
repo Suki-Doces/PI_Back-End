@@ -65,6 +65,12 @@ app.use('/suki-doces/produtos', rotaProdutos);
 app.use('/suki-doces/carrinho', rotaCarrinho);
 app.use('/suki-doces/chat', rotaChat);
 
+// Expor o router de pedidos também em rota pública (/suki-doces/pedidos)
+// Isso permite que o checkout do cliente (POST /pedidos) funcione sem usar
+// necessariamente o prefixo /admin. Mantemos também a montagem em /admin/pedidos
+// para compatibilidade com painéis que ainda usam esse caminho.
+app.use('/suki-doces/pedidos', rotaPedidos);
+
 // --- ROTAS PRIVADAS (Painel Admin) ---
 // Idealmente, você deve passar o seu authMiddleware aqui para proteger tudo!
 app.use('/suki-doces/admin', rotaAdmin); 

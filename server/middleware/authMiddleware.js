@@ -11,7 +11,15 @@ export const authMiddleware = (req, res, next) => {
 
     // CORRIGIDO: Removido o fallback inseguro 'seu-secret-key'
     // Se JWT_SECRET não estiver no .env, o servidor deve falhar em vez de usar chave fraca
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (err) {
+      // Normaliza erros JWT para respostas mais amigáveis
+      if (err.name === 'TokenExpiredError') return next(new AppError('Token expired', 401));
+      if (err.name === 'JsonWebTokenError') return next(new AppError('Invalid token', 401));
+      return next(err);
+    }
 
     // CORRIGIDO: era req.user, agora req.usuario
     // cart.routes.js e notification.routes.js usam req.usuario

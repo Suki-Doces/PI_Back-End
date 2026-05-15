@@ -1,5 +1,4 @@
 import express from 'express';
-import bcrypt from 'bcrypt';
 import { authMiddleware } from '../middleware/authMiddleware.js';
 import { register, login } from '../controller/auth.controller.js';
 import { prisma } from '../lib/prisma.js';
