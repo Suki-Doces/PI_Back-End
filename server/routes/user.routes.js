@@ -26,8 +26,16 @@ router.get('/perfil', authMiddleware, async (req, res, next) => {
     const usuario = await prisma.usuario.findUnique({
       where: { id_usuario: req.usuario.id },
       select: {
-        id_usuario: true, nome: true, email: true,
-        telefone: true, role: true, data_criacao: true, status_id: true
+        id_usuario: true,
+        nome: true,
+        email: true,
+        telefone: true,
+        cpf: true,
+        endereco: true,
+        data_nascimento: true,
+        role: true,
+        data_criacao: true,
+        status_id: true
       }
     });
     if (!usuario) return res.status(404).json({ message: 'Usuário não encontrado' });
@@ -43,9 +51,23 @@ router.put('/perfil', authMiddleware, async (req, res, next) => {
       where: { id_usuario: req.usuario.id },
       data: {
         ...(nome && { nome: nome.trim() }),
-        ...(telefone !== undefined && { telefone })
+        ...(telefone !== undefined && { telefone }),
+        ...(cpf !== undefined && { cpf }),
+        ...(endereco !== undefined && { endereco }),
+        ...(dataNascimento !== undefined && {
+          data_nascimento: data_nascimento ? new Date(data_nascimento) : null
+        })
       },
-      select: { id_usuario: true, nome: true, email: true, telefone: true, role: true }
+      select: {
+        id_usuario: true,
+        nome: true,
+        email: true,
+        telefone: true,
+        cpf: true,
+        endereco: true,
+        data_nascimento: true,
+        role: true
+      }
     });
     return res.status(200).json({ message: 'Dados atualizados!', user: atualizado });
   } catch (error) { next(error); }
